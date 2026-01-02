@@ -343,13 +343,13 @@ def api_status():
 
 
 # Protected video feed endpoint
-@app.route("/video_feed")
-@token_required
-def video_feed(current_email):
-    return jsonify({
-        "error": "video_feed_disabled",
-        "message": "Video streaming dinonaktifkan. Gunakan endpoint /api/detect_frame untuk inferensi YOLO."
-    }), 410
+# @app.route("/video_feed")
+# @token_required
+# def video_feed(current_email):
+#    return jsonify({
+#        "error": "video_feed_disabled",
+#        "message": "Video streaming dinonaktifkan. Gunakan endpoint /api/detect_frame untuk inferensi YOLO."
+#    }), 410
 
 # -----------------------------
 # CRUD Produk (kept), protect mutations
