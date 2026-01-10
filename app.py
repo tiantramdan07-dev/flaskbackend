@@ -39,7 +39,7 @@ DB_CONFIG = {
     "port": int(os.environ.get("DB_PORT", 5432)),
     "user": os.environ.get("DB_USER", "postgres"),
     "password": os.environ.get("DB_PASS", "gajahbengkak"),
-    "dbname": os.environ.get("DB_NAME", "ujicobamodelai")
+    "dbname": os.environ.get("DB_NAME", "timbangandigitalai")
 }
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "super-secret-dev-key")  # change in production
