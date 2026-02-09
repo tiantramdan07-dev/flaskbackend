@@ -29,6 +29,11 @@ Thumbs.db
 .vscode/
 .idea/
 
+# --- NODE / FRONTEND ---
+node_modules/
+dist/
+build/
+
 # --- YOLO / ML OUTPUT ---
 runs/
 
@@ -40,3 +45,7 @@ runs/
 
 # --- MEDIA UPLOADS ---
 uploads/
+
+# --- ENV ---
+.env
+.env.*

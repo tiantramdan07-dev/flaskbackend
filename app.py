@@ -46,8 +46,8 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "super-secret-dev-key")  # change in p
 JWT_ALGO = "HS256"
 JWT_EXP_HOURS = int(os.environ.get("JWT_EXP_HOURS", 4))
 
-SIMULATE_SCALE = os.environ.get("SIMULATE_SCALE", "1") == "1"
-SERIAL_PORT = os.environ.get("SERIAL_PORT", "COM3")
+SIMULATE_SCALE = os.environ.get("SIMULATE_SCALE", "0") == "1"
+SERIAL_PORT = os.environ.get("SERIAL_PORT", "COM7")
 BAUD_RATE = int(os.environ.get("BAUD_RATE", 9600))
 
 UPLOAD_FOLDER = os.path.join(os.getcwd(), "static", "assets", "img")
@@ -103,17 +103,19 @@ MIN_INTERVAL_S = 0.06
 # -----------------------------
 # AUTH helpers (JWT)
 # -----------------------------
-def create_token(email: str):
+def create_token(user):
     payload = {
-        "email": email,
+        "id": user["id"],
+        "email": user["email"],
+        "role": user["role"],
         "exp": datetime.utcnow() + timedelta(hours=JWT_EXP_HOURS),
         "iat": datetime.utcnow()
     }
     token = jwt.encode(payload, SECRET_KEY, algorithm=JWT_ALGO)
-    # pyjwt returns str in v2+, bytes in older; ensure string
     if isinstance(token, bytes):
         token = token.decode("utf-8")
     return token
+
 
 def decode_token(token: str):
     try:
@@ -155,26 +157,55 @@ def token_required(f):
 # -----------------------------
 def read_scale_data():
     global latest_weight, scale_connection
+
     if SIMULATE_SCALE:
+        print("⚠️ Timbangan: MODE SIMULASI")
         while True:
             latest_weight = round(random.uniform(0.1, 2.5), 3)
             time.sleep(1)
-    else:
-        try:
-            import serial
-            scale_connection = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
-            print(f"✅ Berhasil terhubung ke timbangan di port {SERIAL_PORT}")
-            while True:
-                line = scale_connection.readline().decode('utf-8').strip()
-                if line:
-                    try:
-                        latest_weight = float(line.split()[0])
-                    except Exception:
-                        print("⚠️ Format data dari timbangan tidak valid:", line)
-                time.sleep(0.5)
-        except Exception as e:
-            print("❌ Gagal terhubung ke timbangan:", e)
-            latest_weight = -1.0
+        return
+
+    try:
+        import serial
+        scale_connection = serial.Serial(
+            SERIAL_PORT,
+            BAUD_RATE,
+            timeout=1
+        )
+        time.sleep(2)  # tunggu Arduino reset
+        print(f"✅ Timbangan terhubung di {SERIAL_PORT}")
+
+        while True:
+            try:
+                line = scale_connection.readline().decode("utf-8").strip()
+
+                if not line:
+                    continue  # kosong, skip
+
+                # Arduino kirim ANGKA SAJA
+                weight = float(line)
+
+                # safety
+                if weight < 0:
+                    weight = 0.0
+
+                latest_weight = round(weight, 3)
+
+                # debug (boleh dimatikan nanti)
+                print(f"Berat: {latest_weight} kg")
+
+            except ValueError:
+                # kalau ada noise / karakter aneh
+                print(f"⚠️ Data serial diabaikan: {line}")
+
+            except Exception as e:
+                print("❌ Error baca serial:", e)
+
+            time.sleep(0.1)
+
+    except Exception as e:
+        print("❌ Gagal konek ke timbangan:", e)
+        latest_weight = 0.0
 
 # -----------------------------
 # AUTH routes: signup / login / me
@@ -220,19 +251,30 @@ def auth_login():
 
     email = (data.get("email") or "").strip().lower()
     password = data.get("password")
+
     if not email or not password:
         return jsonify({"error": "Silahkan masukkan email dan kata sandi Anda"}), 400
 
     db = get_db()
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT id, email, password_hash FROM users WHERE email = %s", (email,))
+    cur.execute("""
+        SELECT id, email, password_hash, role
+        FROM users
+        WHERE email = %s
+    """, (email,))
     user = cur.fetchone()
     cur.close(); db.close()
+
     if not user or not check_password_hash(user["password_hash"], password):
         return jsonify({"error": "user atau password salah"}), 401
 
-    token = create_token(user["email"])
-    return jsonify({"token": token, "email": user["email"]})
+    token = create_token(user)
+
+    return jsonify({
+        "token": token,
+        "email": user["email"],
+        "role": user["role"]
+    })
 
 @app.route("/auth/me", methods=["GET"])
 @token_required
@@ -262,28 +304,23 @@ def index():
 
 @app.route("/api/status", methods=["POST"])
 def api_status():
-    """
-    Expecting JSON: { "client_id": "<uuid>" }
-    Returns: {"detection": "...", "weight": 0.123, "ts": "..."}
-    If client_id missing, fallback to "server" latest (eg. video feed) or return default.
-    """
     global latest_detection, latest_weight
+
     data = request.get_json(silent=True) or {}
     client_id = data.get("client_id")
 
-    if client_id:
-        status = latest_detection.get(client_id, {
-            "detection": "-",
-            "weight": latest_weight,
-            "ts": datetime.now(tz=ZoneInfo("Asia/Jakarta")).isoformat()
-        })
+    now_ts = datetime.now(tz=ZoneInfo("Asia/Jakarta")).isoformat()
+
+    if client_id and client_id in latest_detection:
+        status = latest_detection[client_id].copy()
+        status["ts"] = now_ts   # 🔥 PAKSA UPDATE JAM
+        status["weight"] = latest_weight
     else:
-        # fallback: try server-side video feed key
-        status = latest_detection.get("server", {
+        status = {
             "detection": "-",
             "weight": latest_weight,
-            "ts": datetime.now(tz=ZoneInfo("Asia/Jakarta")).isoformat()
-        })
+            "ts": now_ts
+        }
 
     return jsonify(status)
 
@@ -400,7 +437,7 @@ def api_create_produk(current_email):
             harga = body.get("harga_per_kg")
             file = None
 
-        # --- VALIDASI WAJIB ---
+        # --- VALIDASI ADD PRODUCT ---
         if not nama or harga is None:
             return jsonify({"error": "nama_produk dan harga_per_kg wajib diisi"}), 400
 
