@@ -309,22 +309,18 @@ def api_status():
     data = request.get_json(silent=True) or {}
     client_id = data.get("client_id", "server")
 
-    # --- ambil detection per client ---
     det = latest_detection.get(client_id, {})
-    detection = det.get("detection", "-")
-
-    # --- ambil weight per client ---
     wt = latest_weight.get(client_id, {})
-    weight = wt.get("weight", 0.0)
 
     status = {
-        "detection": detection,
-        "weight": weight,
-        # 🔥 waktu HARUS selalu realtime
+        "detection": det.get("detection", "-"),
+        "weight": wt.get("weight", 0.0),
+        # ⏱️ waktu selalu realtime (FE aman)
         "ts": datetime.now(tz=ZoneInfo("Asia/Jakarta")).isoformat()
     }
 
     return jsonify(status)
+
 
 
 # -----------------------------
