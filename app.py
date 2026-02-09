@@ -153,7 +153,7 @@ def token_required(f):
 
 
 # -----------------------------
-# Timbangan (simulasi/dummy)
+# Timbangan: baca data serial
 # -----------------------------
 def read_scale_data():
     global latest_weight, scale_connection
@@ -309,12 +309,18 @@ def api_status():
     data = request.get_json(silent=True) or {}
     client_id = data.get("client_id", "server")
 
-    cached = latest_detection.get(client_id, {})
+    # --- ambil detection per client ---
+    det = latest_detection.get(client_id, {})
+    detection = det.get("detection", "-")
+
+    # --- ambil weight per client ---
+    wt = latest_weight.get(client_id, {})
+    weight = wt.get("weight", 0.0)
 
     status = {
-        "detection": cached.get("detection", "-"),
-        "weight": latest_weight,
-        # 🔥 WAKTU REALTIME, TANPA SYARAT
+        "detection": detection,
+        "weight": weight,
+        # 🔥 waktu HARUS selalu realtime
         "ts": datetime.now(tz=ZoneInfo("Asia/Jakarta")).isoformat()
     }
 
