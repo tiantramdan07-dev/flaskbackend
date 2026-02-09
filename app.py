@@ -304,22 +304,26 @@ def index():
 
 @app.route("/api/status", methods=["POST"])
 def api_status():
-    global latest_detection, latest_weight
+    global latest_detection
 
     data = request.get_json(silent=True) or {}
-    client_id = data.get("client_id", "server")
+    client_id = data.get("client_id")
 
-    det = latest_detection.get(client_id, {})
-    wt = latest_weight.get(client_id, {})
+    # ambil data milik client ini saja
+    cached = latest_detection.get(client_id)
 
-    status = {
-        "detection": det.get("detection", "-"),
-        "weight": wt.get("weight", 0.0),
-        # ⏱️ waktu selalu realtime (FE aman)
+    if not cached:
+        return jsonify({
+            "detection": "-",
+            "weight": 0.0,
+            "ts": datetime.now(tz=ZoneInfo("Asia/Jakarta")).isoformat()
+        })
+
+    return jsonify({
+        "detection": cached.get("detection", "-"),
+        "weight": cached.get("weight", 0.0),
         "ts": datetime.now(tz=ZoneInfo("Asia/Jakarta")).isoformat()
-    }
-
-    return jsonify(status)
+    })
 
 
 
