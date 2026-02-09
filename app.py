@@ -304,28 +304,19 @@ def index():
 
 @app.route("/api/status", methods=["POST"])
 def api_status():
-    """
-    Expecting JSON: { "client_id": "<uuid>" }
-    Returns: {"detection": "...", "weight": 0.123, "ts": "..."}
-    If client_id missing, fallback to "server" latest (eg. video feed) or return default.
-    """
     global latest_detection, latest_weight
-    data = request.get_json(silent=True) or {}
-    client_id = data.get("client_id")
 
-    if client_id:
-        status = latest_detection.get(client_id, {
-            "detection": "-",
-            "weight": latest_weight,
-            "ts": datetime.now(tz=ZoneInfo("Asia/Jakarta")).isoformat()
-        })
-    else:
-        # fallback: try server-side video feed key
-        status = latest_detection.get("server", {
-            "detection": "-",
-            "weight": latest_weight,
-            "ts": datetime.now(tz=ZoneInfo("Asia/Jakarta")).isoformat()
-        })
+    data = request.get_json(silent=True) or {}
+    client_id = data.get("client_id", "server")
+
+    cached = latest_detection.get(client_id, {})
+
+    status = {
+        "detection": cached.get("detection", "-"),
+        "weight": latest_weight,
+        # 🔥 WAKTU REALTIME, TANPA SYARAT
+        "ts": datetime.now(tz=ZoneInfo("Asia/Jakarta")).isoformat()
+    }
 
     return jsonify(status)
 
