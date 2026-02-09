@@ -302,27 +302,27 @@ def auth_me(current_email):
 def index():
     return jsonify({"status": "API running"})
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 @app.route("/api/status", methods=["POST"])
 def api_status():
     global latest_detection, latest_weight
 
     data = request.get_json(silent=True) or {}
-    client_id = data.get("client_id")
+    client_id = data.get("client_id", "server")
 
-    now_ts = datetime.now(tz=ZoneInfo("Asia/Jakarta")).isoformat()
+    cached = latest_detection.get(client_id, {})
 
-    if client_id and client_id in latest_detection:
-        status = latest_detection[client_id].copy()
-        status["ts"] = now_ts   # 🔥 PAKSA UPDATE JAM
-        status["weight"] = latest_weight
-    else:
-        status = {
-            "detection": "-",
-            "weight": latest_weight,
-            "ts": now_ts
-        }
+    status = {
+        "detection": cached.get("detection", "-"),
+        "weight": latest_weight,
+        # 🔥 WAKTU SELALU BARU, TANPA SYARAT
+        "ts": datetime.now(tz=ZoneInfo("Asia/Jakarta")).isoformat()
+    }
 
     return jsonify(status)
+
 
 
 # -----------------------------
